@@ -44,7 +44,7 @@ export default function Conversa() {
 
   return (
     <SafeAreaView style={s.area}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView ref={rolagem} contentContainerStyle={s.lista}>
           {mensagens.map((m, i) => {
             const conteudo = m.papel === 'assistant' ? extrairPacto(m.conteudo).visivel : m.conteudo;

@@ -7,7 +7,9 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "backgroundColor": "#EEF0EC",
-    "ios": { "supportsTablet": false },
+    "ios": {
+      "supportsTablet": false
+    },
     "android": {},
     "plugins": [
       "expo-router",
@@ -17,7 +19,8 @@
           "microphonePermission": "O Protocolo 7 usa o microfone só para gravar a sua própria declaração do pacto."
         }
       ],
-      "expo-notifications"
+      "expo-notifications",
+      "expo-status-bar"
     ]
   }
 }

@@ -1,9 +1,11 @@
-// Edge Function "mentor": a única parte do sistema que conversa com a API do Claude.
-// A chave fica em ANTHROPIC_API_KEY (supabase secrets set) e nunca vai para o app.
+// Edge Function "mentor": a única parte do sistema que conversa com a API do Gemini.
+// A chave fica em GEMINI_API_KEY (supabase secrets set) e nunca vai para o app.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { BASE, ETAPA_CHECKIN, ETAPA_PACTO } from './prompt.ts';
 
-const MODELO = Deno.env.get('MENTOR_MODEL') ?? 'claude-sonnet-5';
+// gemini-3.8-flash (o mais novo) tem cota gratuita de só 20 chamadas/dia.
+// gemini-3.5-flash-lite tem cota bem maior no free tier — melhor pra uso real sem custo.
+const MODELO = Deno.env.get('MENTOR_MODEL') ?? 'gemini-3.5-flash-lite';
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -20,23 +22,34 @@ function dataLocalHoje(): string {
   return new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10);
 }
 
-async function chamarClaude(system: string, messages: Msg[]): Promise<string> {
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': Deno.env.get('ANTHROPIC_API_KEY')!,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({ model: MODELO, max_tokens: 800, system, messages }),
+async function chamarGemini(system: string, messages: Msg[]): Promise<string> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODELO}:generateContent`;
+  const corpo = JSON.stringify({
+    system_instruction: { parts: [{ text: system }] },
+    contents: messages.map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
+    generationConfig: { maxOutputTokens: 800 },
   });
-  if (!r.ok) throw new Error(`API do Claude: ${r.status} ${await r.text()}`);
-  const data = await r.json();
-  return (data.content ?? [])
-    .filter((b: { type: string }) => b.type === 'text')
-    .map((b: { text: string }) => b.text)
-    .join('\n')
-    .trim();
+
+  // O modelo às vezes devolve 429/503 por pico de demanda passageiro — tenta de novo antes de desistir.
+  let ultimoErro = '';
+  for (let tentativa = 0; tentativa < 3; tentativa++) {
+    if (tentativa > 0) await new Promise((r) => setTimeout(r, 500 * tentativa));
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': Deno.env.get('GEMINI_API_KEY')! },
+      body: corpo,
+    });
+    if (r.ok) {
+      const data = await r.json();
+      return ((data.candidates?.[0]?.content?.parts ?? []) as { text?: string }[])
+        .map((p) => p.text ?? '')
+        .join('\n')
+        .trim();
+    }
+    ultimoErro = `API do Gemini: ${r.status} ${await r.text()}`;
+    if (r.status !== 429 && r.status !== 503) break;
+  }
+  throw new Error(ultimoErro);
 }
 
 Deno.serve(async (req) => {
@@ -61,7 +74,7 @@ Deno.serve(async (req) => {
       if (msgs.length === 0 || msgs[msgs.length - 1].role !== 'user') return responder({ erro: 'mensagem vazia' }, 400);
       if (msgs[0].role === 'assistant') msgs = [{ role: 'user', content: 'Quero começar um pacto.' }, ...msgs];
 
-      const texto = await chamarClaude(`${BASE}\n\n${ETAPA_PACTO}`, msgs);
+      const texto = await chamarGemini(`${BASE}\n\n${ETAPA_PACTO}`, msgs);
       await supa.from('mensagens').insert([
         { user_id: uid, etapa: 'pacto', papel: 'user', conteudo: msgs[msgs.length - 1].content },
         { user_id: uid, etapa: 'pacto', papel: 'assistant', conteudo: texto },
@@ -98,7 +111,7 @@ ${historico || 'nenhum'}`;
       const nota = typeof corpo.nota === 'string' ? corpo.nota.trim().slice(0, 1000) : '';
       const pergunta = `Check-in de hoje (dia ${dia} de 30): ${corpo.cumpriu ? 'cumpri' : 'não cumpri'}.${nota ? ` Nota: ${nota}` : ''}`;
 
-      const texto = await chamarClaude(`${BASE}\n\n${ETAPA_CHECKIN}\n\n${contexto}`, [{ role: 'user', content: pergunta }]);
+      const texto = await chamarGemini(`${BASE}\n\n${ETAPA_CHECKIN}\n\n${contexto}`, [{ role: 'user', content: pergunta }]);
       await supa.from('mensagens').insert([
         { user_id: uid, etapa: 'checkin', papel: 'user', conteudo: pergunta },
         { user_id: uid, etapa: 'checkin', papel: 'assistant', conteudo: texto },

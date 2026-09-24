@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { Alert, Linking, Share, StyleSheet, Text, View } from 'react-native';
-import { excluirConta, exportarTudo } from '../src/lib/dados';
+import { useEffect, useState } from 'react';
+import { Alert, Linking, Share, StyleSheet, Switch, Text, View } from 'react-native';
+import { buscarPerfil, excluirConta, exportarTudo, salvarConsentimento } from '../src/lib/dados';
 import { supabase } from '../src/lib/supabase';
 import { cancelarLembretes } from '../src/lib/lembrete';
 import { Botao } from '../src/components/Botao';
@@ -10,6 +10,26 @@ import { cor, esp, txt } from '../src/theme';
 export default function Dados() {
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  const [voz, setVoz] = useState(false);
+  const [salvandoVoz, setSalvandoVoz] = useState(false);
+
+  useEffect(() => {
+    buscarPerfil().then((perfil) => setVoz(!!perfil?.consentimento_voz_em));
+  }, []);
+
+  const alternarVoz = async (novoValor: boolean) => {
+    setVoz(novoValor);
+    setSalvandoVoz(true);
+    setErro(null);
+    try {
+      await salvarConsentimento(novoValor);
+    } catch (e: any) {
+      setVoz(!novoValor);
+      setErro(e.message);
+    } finally {
+      setSalvandoVoz(false);
+    }
+  };
 
   const exportar = async () => {
     setErro(null);
@@ -42,6 +62,15 @@ export default function Dados() {
   return (
     <Tela>
       <Text style={[txt.titulo, { marginTop: esp.l }]}>Meus dados</Text>
+
+      <View style={s.linha}>
+        <View style={s.textoLinha}>
+          <Text style={s.tituloLinha}>Gravar minha voz na declaração</Text>
+          <Text style={txt.rotulo}>Se desligado, a próxima declaração de pacto fica só escrita.</Text>
+        </View>
+        <Switch value={voz} onValueChange={alternarVoz} disabled={salvandoVoz} trackColor={{ true: cor.tinta }} />
+      </View>
+
       <Botao titulo="Exportar tudo (JSON)" tipo="secundario" onPress={exportar} />
       <Botao titulo="Sair" tipo="secundario" onPress={() => supabase.auth.signOut()} />
       <Botao titulo="Excluir conta e dados" tipo="selo" onPress={excluir} carregando={ocupado} />
@@ -61,5 +90,8 @@ export default function Dados() {
 }
 
 const s = StyleSheet.create({
+  linha: { flexDirection: 'row', alignItems: 'center', gap: esp.m, borderTopWidth: 1, borderColor: cor.linha, paddingTop: esp.m },
+  textoLinha: { flex: 1 },
+  tituloLinha: { fontSize: 17, fontWeight: '600', color: cor.tinta, marginBottom: 4 },
   ajuda: { gap: esp.s, borderTopWidth: 1, borderColor: cor.linha, paddingTop: esp.l, marginTop: esp.l },
 });
