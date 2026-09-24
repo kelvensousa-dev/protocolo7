@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Protocolo 7",
+    "slug": "protocolo7",
+    "scheme": "protocolo7",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#EEF0EC",
+    "ios": { "supportsTablet": false },
+    "android": {},
+    "plugins": [
+      "expo-router",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "O Protocolo 7 usa o microfone só para gravar a sua própria declaração do pacto."
+        }
+      ],
+      "expo-notifications"
+    ]
+  }
+}
